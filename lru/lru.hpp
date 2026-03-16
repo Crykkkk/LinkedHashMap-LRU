@@ -5,6 +5,8 @@
 #include "class-matrix.hpp"
 #include "exceptions.hpp"
 #include "utility.hpp"
+#include <iterator>
+#include <vector>
 
 class Hash {
 public:
@@ -13,11 +15,13 @@ public:
         return std::hash<int>()(val);
     }
 };
+// Hash 实现
 
 class Equal {
 public:
     bool operator()(const Integer &lhs, const Integer &rhs) const { return lhs.val == rhs.val; }
 };
+// Integer 类的 =
 
 namespace sjtu {
 template<class T>
@@ -119,82 +123,165 @@ public:
 	bool empty() {}
 };
 
-template<class Key, class T, class Hash = std::hash<Key>, class Equal = std::equal_to<Key>>
+template<class Key, class T, class Hash = std::hash<Key>, class Equal = std::equal_to<Key>> // 注意 equal 仅 key
 class hashmap {
 public:
 	using value_type = pair<const Key, T>;
-	/**
-	 * elements
-	 * add whatever you want
-	 */
-
+	int Size;
+	int cnt = 0;
+	const float load_factor = 0.8;
+	std::vector<std::vector<value_type>> data;
 	// --------------------------
 
 	/**
 	 * the follows are constructors and destructors
 	 * you can also add some if needed.
 	 */
-	hashmap() {}
-	hashmap(const hashmap &other) {}
-	~hashmap() {}
-	hashmap &operator=(const hashmap &other) {}
+	hashmap(): Size(100) {
+		data.resize(Size);
+	}
+	hashmap(const hashmap &other) {
+		Size = other.Size;
+		data = other.data;
+	}
+	// ~hashmap() {}
+	hashmap &operator=(const hashmap &other) {
+		if (this == &other) {
+       	return *this;
+    	}
+		Size = other.Size;
+		cnt = other.cnt;
+		data = other.data;
+		return *this;
+	}
 
 	class iterator {
-	public:
-		/**
-		 * elements
-		 * add whatever you want
-		 */
+	public: // 用 idx 来指示
+		int bucket = 0; 
+		int idx = 0;   
+		hashmap* host = nullptr;  
+
 		// --------------------------
 		/**
 		 * the follows are constructors and destructors
 		 * you can also add some if needed.
 		 */
 		iterator() {}
-		iterator(const iterator &t) {}
-		~iterator() {}
+		iterator (int b, int i, hashmap* h): bucket(b), idx(i), host(h) {}
+		iterator(const iterator &t) {
+			bucket = t.bucket;
+			idx = t.idx;
+			host = t.host;
+		}
+		~iterator() {
+			host = nullptr;
+		}
 
 		/**
 		 * if point to nothing
 		 * throw
 		 */
-		value_type &operator*() const {}
+		value_type &operator*() const {
+			if (host == nullptr) {
+				throw sjtu::container_is_empty();
+			}
+			return host->data[bucket][idx];
+		}
 
 		/**
 		 * other operation
 		 */
-		value_type *operator->() const noexcept {}
-		bool operator==(const iterator &rhs) const {}
-		bool operator!=(const iterator &rhs) const {}
+		value_type *operator->() const noexcept {
+			if (host == nullptr) return nullptr;
+			return &host->data[bucket][idx];
+		}
+		bool operator==(const iterator &rhs) const {
+			return (host == rhs.host) && (bucket == rhs.bucket) && (idx == rhs.idx);
+		}
+		bool operator!=(const iterator &rhs) const {
+			return !(*this == rhs);
+		}
 	};
 
-	void clear() {}
+	void clear() {
+		for (int i = 0; i < Size; i++) {
+			data[i].clear();
+		}
+	}
 	/**
 	 * you need to expand the hashmap dynamically
 	 */
-	void expand() {}
+	void expand() { // 这里需要 rehash，才能支持后面的 find
+		Size *= 2;
+		std::vector<std::vector<value_type>> newdata(Size);
+		for (int i = 0; i < data.size(); i++) {
+			for (value_type j : data[i]) {
+				int nh = Hash()(j.first) % Size;
+				newdata[nh].push_back(j);
+			}
+		}
+		data.swap(newdata); 
+	} // utility 没写赋值运算符故 swap
 
 	/**
 	 * the iterator point at nothing
 	 */
-	iterator end() const {}
+	iterator end() const {
+		return iterator();
+	}
 	/**
 	 * find, return a pointer point to the value
 	 * not find, return the end (point to nothing)
 	 */
-	iterator find(const Key &key) const {}
+	iterator find(const Key &key) const {
+		int hash_out = Hash()(key) % Size;
+		const std::vector<value_type> &check = data[hash_out];
+		for (int i = 0; i < check.size(); i++) {
+			if (Equal()(check[i].first, key)) {
+				return iterator(hash_out, i, const_cast<hashmap*>(this)); // 这里要注意 const 导致 this 也变成 const hashmap* 了
+			}
+		} 
+		return end();
+	}
 	/**
 	 * already have a value_pair with the same key
 	 * -> just update the value, return false
 	 * not find a value_pair with the same key
 	 * -> insert the value_pair, return true
 	 */
-	sjtu::pair<iterator, bool> insert(const value_type &value_pair) {}
+	sjtu::pair<iterator, bool> insert(const value_type &value_pair) {
+		// 需要注意什么时候调用 expand
+		int hash = Hash()(value_pair.first) % Size;
+		std::vector<value_type> &check = data[hash];
+		for (int i = 0; i < check.size(); i++) {
+			if (Equal()(check[i].first, value_pair.first)) {
+				check[i].second = value_pair.second;
+				return sjtu::pair<iterator, bool>(iterator(hash, i, this), false);
+			}
+		}
+		check.push_back(value_pair);
+		cnt++;
+		if (cnt >= Size * load_factor) {
+			expand();
+			return sjtu::pair<iterator, bool>(find(value_pair.first), true);
+		}
+		return sjtu::pair<iterator, bool>(iterator(hash, check.size() - 1, this), true);
+	}
 	/**
 	 * the value_pair exists, remove and return true
 	 * otherwise, return false
 	 */
-	bool remove(const Key &key) {}
+	bool remove(const Key &key) {
+		int hash_out = Hash()(key) % Size;
+		std::vector<value_type> &check = data[hash_out];
+		for (int i = 0; i < check.size(); i++) {
+			if (Equal()(check[i].first, key)) {
+				check.erase(check.begin() + i);
+				return true;
+			}
+		} 
+		return false;
+	}
 };
 
 template<class Key, class T, class Hash = std::hash<Key>, class Equal = std::equal_to<Key>>
@@ -370,11 +457,11 @@ public:
 	 * save the value_pair in the memory
 	 * delete something in the memory if necessary
 	 */
-	void save(const value_type &v) const {}
+	void save(const value_type &v) {}
 	/**
 	 * return a pointer contain the value
 	 */
-	Matrix<int> *get(const Integer &v) const {}
+	Matrix<int> *get(const Integer &v) {}
 	/**
 	 * just print everything in the memory
 	 * to debug or test.
