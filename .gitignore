@@ -1,3 +1,6 @@
+test_hashmap.cpp
 test_hashmap
+*.o
 *.out
 .vscode/
+t1

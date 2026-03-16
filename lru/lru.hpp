@@ -7,6 +7,7 @@
 #include "utility.hpp"
 #include <iterator>
 #include <vector>
+#include <list>
 
 class Hash {
 public:
@@ -127,10 +128,13 @@ template<class Key, class T, class Hash = std::hash<Key>, class Equal = std::equ
 class hashmap {
 public:
 	using value_type = pair<const Key, T>;
+	using Bucket = std::list<value_type*>;
+   using BucketIterator = typename Bucket::iterator; 
+	
 	int Size;
 	int cnt = 0;
 	const float load_factor = 0.8;
-	std::vector<std::vector<value_type>> data;
+	std::vector<std::list<value_type*>> data;
 	// --------------------------
 
 	/**
@@ -140,25 +144,43 @@ public:
 	hashmap(): Size(100) {
 		data.resize(Size);
 	}
-	hashmap(const hashmap &other) {
+	hashmap(const hashmap &other) { // Done
 		Size = other.Size;
-		data = other.data;
+		cnt = other.cnt;
+		data.resize(Size);
+		for (int i = 0; i < Size; i++) {
+         for (value_type* ptr : other.data[i]) {
+            value_type* new_pair = new value_type(*ptr);
+            data[i].push_back(new_pair);
+        }
+   	}
 	}
-	// ~hashmap() {}
-	hashmap &operator=(const hashmap &other) {
+	~hashmap() { // Done
+		clear();
+	}
+	hashmap &operator=(const hashmap &other) { // Done
 		if (this == &other) {
        	return *this;
     	}
+
+		clear();
+
 		Size = other.Size;
 		cnt = other.cnt;
-		data = other.data;
+		data.resize(Size);
+		for (int i = 0; i < Size; i++) {
+         for (value_type* ptr : other.data[i]) {
+            value_type* new_pair = new value_type(*ptr);
+            data[i].push_back(new_pair);
+        }
+   	}
 		return *this;
 	}
 
 	class iterator {
 	public: // 用 idx 来指示
 		int bucket = 0; 
-		int idx = 0;   
+		BucketIterator it = BucketIterator(); 
 		hashmap* host = nullptr;  
 
 		// --------------------------
@@ -167,14 +189,13 @@ public:
 		 * you can also add some if needed.
 		 */
 		iterator() {}
-		iterator (int b, int i, hashmap* h): bucket(b), idx(i), host(h) {}
+		iterator (int b, BucketIterator i, hashmap* h): bucket(b), it(i), host(h) {}
 		iterator(const iterator &t) {
 			bucket = t.bucket;
-			idx = t.idx;
+			it = t.it;
 			host = t.host;
 		}
 		~iterator() {
-			host = nullptr;
 		}
 
 		/**
@@ -182,52 +203,61 @@ public:
 		 * throw
 		 */
 		value_type &operator*() const {
+			// if (host == nullptr || it == nullptr) {
 			if (host == nullptr) {
 				throw sjtu::container_is_empty();
 			}
-			return host->data[bucket][idx];
+			return **it;
 		}
 
 		/**
 		 * other operation
 		 */
 		value_type *operator->() const noexcept {
-			if (host == nullptr) return nullptr;
-			return &host->data[bucket][idx];
+			// if (host == nullptr || it == nullptr) {
+			if (host == nullptr) {
+				throw sjtu::container_is_empty();
+			}
+			return *it;
 		}
-		bool operator==(const iterator &rhs) const {
-			return (host == rhs.host) && (bucket == rhs.bucket) && (idx == rhs.idx);
+		bool operator==(const iterator &rhs) const { // Done
+			return (host == rhs.host) && (bucket == rhs.bucket) && (it == rhs.it);
 		}
-		bool operator!=(const iterator &rhs) const {
+		bool operator!=(const iterator &rhs) const { // Done
 			return !(*this == rhs);
 		}
 	};
 
-	void clear() {
+	void clear() { // Done
 		for (int i = 0; i < Size; i++) {
+			for (value_type* ptr : data[i]) {
+				delete ptr; 
+			}
 			data[i].clear();
 		}
+		cnt = 0;
 	}
+
 	/**
 	 * you need to expand the hashmap dynamically
 	 */
 	void expand() { // 这里需要 rehash，才能支持后面的 find
 		Size *= 2;
-		std::vector<std::vector<value_type>> newdata(Size);
+		std::vector<std::list<value_type*>> newdata(Size);
 		for (int i = 0; i < data.size(); i++) {
-			for (value_type j : data[i]) {
-				int nh = Hash()(j.first) % Size;
+			for (value_type* j : data[i]) {
+				int nh = Hash()(j->first) % Size;
 				newdata[nh].push_back(j);
 			}
 		}
 		data.swap(newdata); 
-	} // utility 没写赋值运算符故 swap
+	} 
 
 	/**
 	 * the iterator point at nothing
 	 */
 	iterator end() const {
-		return iterator();
+		return iterator(Size, BucketIterator(), const_cast<hashmap*>(this));
 	}
 	/**
 	 * find, return a pointer point to the value
@@ -235,12 +265,14 @@ public:
 	 */
 	iterator find(const Key &key) const {
 		int hash_out = Hash()(key) % Size;
-		const std::vector<value_type> &check = data[hash_out];
-		for (int i = 0; i < check.size(); i++) {
-			if (Equal()(check[i].first, key)) {
-				return iterator(hash_out, i, const_cast<hashmap*>(this)); // 这里要注意 const 导致 this 也变成 const hashmap* 了
+
+		std::list<value_type*> &check = const_cast<hashmap*>(this)->data[hash_out];
+
+		for (auto it = check.begin(); it != check.end(); it++) {
+			if (Equal()((*it)->first, key)) {
+				return iterator(hash_out, it, const_cast<hashmap*>(this));
 			}
-		} 
+		}
 		return end();
 	}
 	/**
@@ -251,21 +283,25 @@ public:
 	 */
 	sjtu::pair<iterator, bool> insert(const value_type &value_pair) {
 		// 需要注意什么时候调用 expand
-		int hash = Hash()(value_pair.first) % Size;
-		std::vector<value_type> &check = data[hash];
-		for (int i = 0; i < check.size(); i++) {
-			if (Equal()(check[i].first, value_pair.first)) {
-				check[i].second = value_pair.second;
-				return sjtu::pair<iterator, bool>(iterator(hash, i, this), false);
+		int hash_out = Hash()(value_pair.first) % Size;
+		std::list<value_type*> &check = data[hash_out];
+		for (auto it = check.begin(); it != check.end(); it++) {
+			if (Equal()((*it)->first, value_pair.first)) {
+				(*it)->second = value_pair.second;
+				return sjtu::pair<iterator, bool>(iterator(hash_out, it, const_cast<hashmap*>(this)), false);
 			}
 		}
-		check.push_back(value_pair);
+		
+		check.push_back(new value_type(value_pair));
+
 		cnt++;
 		if (cnt >= Size * load_factor) {
 			expand();
 			return sjtu::pair<iterator, bool>(find(value_pair.first), true);
 		}
-		return sjtu::pair<iterator, bool>(iterator(hash, check.size() - 1, this), true);
+		auto new_it = check.end();
+		--new_it; 
+		return sjtu::pair<iterator, bool>(iterator(hash_out, new_it, this), true);
 	}
 	/**
 	 * the value_pair exists, remove and return true
@@ -273,15 +309,17 @@ public:
 	 */
 	bool remove(const Key &key) {
 		int hash_out = Hash()(key) % Size;
-		std::vector<value_type> &check = data[hash_out];
-		for (int i = 0; i < check.size(); i++) {
-			if (Equal()(check[i].first, key)) {
-				check.erase(check.begin() + i);
-				return true;
+		std::list<value_type*> &check = data[hash_out];
+		for (auto it = check.begin(); it != check.end(); ++it) {
+			if (Equal()((*it)->first, key)) {
+					delete *it;        
+					check.erase(it); 
+					cnt--;
+					return true;
 			}
-		} 
+		}
 		return false;
-	}
+		}
 };
 
 template<class Key, class T, class Hash = std::hash<Key>, class Equal = std::equal_to<Key>>
