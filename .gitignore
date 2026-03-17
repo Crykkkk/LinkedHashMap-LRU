@@ -1,6 +1,10 @@
 test_hashmap.cpp
 test_hashmap
+test_dblist.cpp
+test_dblist
 *.o
 *.out
 .vscode/
 t1
+t2
+t4

@@ -28,19 +28,49 @@ namespace sjtu {
 template<class T>
 class double_list {
 public:
-	/**
-	 * elements
-	 * add whatever you want
-	 */
+	struct node{
+		T data;
+		node* prev = nullptr;
+		node* next = nullptr;
+		node (T d, node* p, node* n) : data(d), prev(p), next(n) {}
+		node (){}
+	};
 
+	int size = 0;
+	node* head_ = new node();
+	node* tail_ = new node();
 	// --------------------------
 	/**
 	 * the follows are constructors and destructors
 	 * you can also add some if needed.
 	 */
-	double_list() {}
-	double_list(const double_list<T> &other) {}
-	~double_list() {}
+	double_list() {
+		head_->next = tail_;
+		tail_->prev = head_;
+	}
+	double_list(const double_list<T> &other) {
+		head_->next = tail_;
+		tail_->prev = head_;
+		size = 0;
+		node* track = other.head_->next;
+		while (track != other.tail_) {
+			insert_tail(track->data);
+			track = track->next;
+		}
+	}
+	~double_list() {
+		node* curr = head_->next;
+		while (curr != tail_) {
+			node* next_node = curr->next;
+			delete curr;
+			curr = next_node;
+		}
+		head_->next = tail_;
+		tail_->prev = head_;
+		size = 0;
+		delete head_;
+		delete tail_;
+	}
 
 	class iterator {
 	public:
@@ -48,55 +78,92 @@ public:
 		 * elements
 		 * add whatever you want
 		 */
+		 node* at = nullptr;
 		// --------------------------
 		/**
 		 * the follows are constructors and destructors
 		 * you can also add some if needed.
 		 */
 		iterator() {}
-		iterator(const iterator &t) {}
-		~iterator() {}
+		iterator(const iterator &t) {
+			at = t.at;
+		}
+		iterator(node* a):at(a){}
+		~iterator() {} // 应该不能 delete 吧？
 		
 		/**
 		 * iter++
 		 */
-		iterator operator++(int) {}
+		iterator operator++(int) {
+			if (at == nullptr || at->next == nullptr) throw sjtu::invalid_iterator();
+			iterator tmp = *this;
+			at = at->next;
+			return tmp;	
+		}
 		/**
 		 * ++iter
 		 */
-		iterator &operator++() {}
+		iterator &operator++() {
+			if (at == nullptr|| at->next == nullptr) throw sjtu::invalid_iterator();
+			at = at->next;
+			return *this; // 引用的返回引用
+		}
 		/**
 		 * iter--
 		 */
-		iterator operator--(int) {}
+		iterator operator--(int) {
+			if (at == nullptr|| at->prev == nullptr|| at->prev->prev == nullptr) throw sjtu::invalid_iterator();
+			iterator tmp = *this;
+			at = at->prev;
+			return tmp;	
+		}
 		/**
 		 * --iter
 		 */
-		iterator &operator--() {}
+		iterator &operator--() {
+			if (at == nullptr|| at->prev == nullptr|| at->prev->prev == nullptr) throw sjtu::invalid_iterator();
+			at = at->prev;
+			return *this; 
+		}
 		
 		/**
 		 * if the iter didn't point to a value
 		 * throw " invalid"
 		 */
-		T &operator*() const {}
+		T &operator*() const { // 现在还在搞混..&返回的也是数据本身，但是作为引用返回
+			if (at == nullptr || at->next == nullptr || at->prev == nullptr) {
+				throw sjtu::invalid_iterator();
+			}
+			return at->data;
+		}
 		
 		/**
 		 * other operation
 		 */
-		T *operator->() const noexcept {}
-		bool operator==(const iterator &rhs) const {}
-		bool operator!=(const iterator &rhs) const {}
+		T *operator->() const noexcept {
+			return &(operator*()); // 复用
+		}
+		bool operator==(const iterator &rhs) const {
+			return (at == rhs.at);
+		}
+		bool operator!=(const iterator &rhs) const {
+			return !(*this == rhs);
+		}
 	};
 	/**
 	 * return an iterator to the beginning
 	 */
-	iterator begin() {}
+	iterator begin() {
+		return iterator(head_->next);
+	} // 应该是这样吧🤔
 	/**
 	 * return an iterator to the ending
 	 * in fact, it returns the iterator point to nothing,
 	 * just after the last element.
 	 */
-	iterator end() {}
+	iterator end() {
+		return iterator(tail_);
+	}
 	/**
 	 * if the iter didn't point to anything, do nothing,
 	 * otherwise, delete the element pointed by the iter
@@ -108,20 +175,55 @@ public:
 	 *  or nothing if the list after the operation
 	 *  don't contain 2nd elememt.
 	 */
-	iterator erase(iterator pos) {}
+	iterator erase(iterator pos) {
+		if (!pos.at || pos == end()) throw sjtu::invalid_iterator();
+		node* ptr = pos.at;
+		node* ret = ptr->next;
+		ptr->prev->next = ptr->next;
+		ptr->next->prev = ptr->prev;
+		delete(ptr);
+		size--;
+		return iterator(ret);
+	}
 
 	/**
 	 * the following are operations of double list
 	 */
-	void insert_head(const T &val) {}
-	void insert_tail(const T &val) {}
-	void delete_head() {}
-	void delete_tail() {}
+	void insert_head(const T &val) {
+		node* nd = new node(val, head_, head_->next);
+		head_->next = nd;
+		nd->next->prev = nd;
+		size++;
+	}
+	void insert_tail(const T &val) {
+		node* nd = new node(val, tail_->prev, tail_);
+		tail_->prev = nd;
+		nd->prev->next = nd;
+		size++;
+	}
+	void delete_head() {
+		if (!size) throw sjtu::container_is_empty();
+		node* target = head_->next;
+		head_->next = target->next;
+		target->next->prev = head_;
+		delete(target);
+		size--;
+	}
+	void delete_tail() {
+		if (!size) throw sjtu::container_is_empty();
+		node* target = tail_->prev;
+		tail_->prev = target->prev;
+		target->prev->next = tail_;
+		delete(target);	
+		size--;	
+	}
 	/**
 	 * if didn't contain anything, return true,
 	 * otherwise false.
 	 */
-	bool empty() {}
+	bool empty() {
+		return !size;
+	}
 };
 
 template<class Key, class T, class Hash = std::hash<Key>, class Equal = std::equal_to<Key>> // 注意 equal 仅 key
