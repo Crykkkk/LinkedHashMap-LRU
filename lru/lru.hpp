@@ -5,6 +5,7 @@
 #include "class-matrix.hpp"
 #include "exceptions.hpp"
 #include "utility.hpp"
+#include <cstddef>
 #include <iterator>
 #include <vector>
 #include <list>
@@ -754,19 +755,41 @@ public:
 class lru {
 	using lmap = sjtu::linked_hashmap<Integer, Matrix<int>, Hash, Equal>;
 	using value_type = sjtu::pair<const Integer, Matrix<int>>;
+	lmap* mem = new lmap();
+	int Size;
 
 public:
-	lru(int size) {}
-	~lru() {}
+	lru(int size) {
+		Size = size;
+	}
+	~lru() {
+		delete mem;
+	}
 	/**
 	 * save the value_pair in the memory
 	 * delete something in the memory if necessary
 	 */
-	void save(const value_type &v) {}
+	void save(const value_type &v) {
+		if (mem->find(v.first) != mem->end() || mem->cnt < Size) mem->insert(v);
+		else {
+			auto to_del = mem->ins_ord.begin();
+			mem->remove(lmap::iterator(to_del));
+			mem->insert(v);
+		}
+	}
 	/**
 	 * return a pointer contain the value
 	 */
-	Matrix<int> *get(const Integer &v) {}
+	Matrix<int> *get(const Integer &v) {
+		auto out = mem->find(v);
+		if (out == mem->end()) return nullptr;
+		value_type tmp = *out;
+		
+		mem->insert(tmp); // 这样就能刷新顺序了qwq
+		
+		out = mem->find(v);
+		return &(out->second);
+	}
 	/**
 	 * just print everything in the memory
 	 * to debug or test.
@@ -774,11 +797,11 @@ public:
 	 * change the order.
 	 */
 	void print() {
-		// sjtu::linked_hashmap<Integer, Matrix<int>, Hash, Equal>::iterator it;
-		// for (it = mem->begin(); it != mem->end(); it++) {
-		// 	std::cout << (*it).first.val << " "
-		// 					<< (*it).second << std::endl;
-		// 	}
+		sjtu::linked_hashmap<Integer, Matrix<int>, Hash, Equal>::iterator it;
+		for (it = mem->begin(); it != mem->end(); it++) {
+			std::cout << (*it).first.val << " "
+							<< (*it).second << std::endl;
+		}
 	}
 };
 } // namespace sjtu
