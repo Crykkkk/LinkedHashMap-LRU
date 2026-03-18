@@ -58,7 +58,19 @@ public:
 			track = track->next;
 		}
 	}
-	~double_list() {
+
+	double_list &operator=(const double_list<T> &other){
+		if (this == &other) return *this;
+		clear();
+		node* track = other.head_->next;
+		while (track != other.tail_) {
+			insert_tail(track->data);
+			track = track->next;
+		}		
+		return *this;
+	}
+
+	void clear (){
 		node* curr = head_->next;
 		while (curr != tail_) {
 			node* next_node = curr->next;
@@ -68,6 +80,9 @@ public:
 		head_->next = tail_;
 		tail_->prev = head_;
 		size = 0;
+	}
+	~double_list() {
+		clear();
 		delete head_;
 		delete tail_;
 	}
@@ -153,7 +168,7 @@ public:
 	/**
 	 * return an iterator to the beginning
 	 */
-	iterator begin() {
+	iterator begin() const {
 		return iterator(head_->next);
 	} 
 	/**
@@ -161,7 +176,7 @@ public:
 	 * in fact, it returns the iterator point to nothing,
 	 * just after the last element.
 	 */
-	iterator end() {
+	iterator end() const {
 		return iterator(tail_);
 	}
 	/**
@@ -334,6 +349,9 @@ public:
 		bool operator!=(const iterator &rhs) const { // Done
 			return !(*this == rhs);
 		}
+		Entry* get_entry() const {
+   		return *it;
+		}
 	};
 
 	void clear() { // Done
@@ -438,137 +456,246 @@ template<class Key, class T, class Hash = std::hash<Key>, class Equal = std::equ
 class linked_hashmap : public hashmap<Key, T, Hash, Equal> {
 public:
 	typedef pair<const Key, T> value_type;
-	/**
-	 * elements
-	 * add whatever you want
-	 */
+	using Base = hashmap<Key, T, Hash, Equal>;
 	double_list<value_type*> ins_ord; // data type 为指针保证了有默认构造函数（也好找）
 
 	// --------------------------
 	class const_iterator;
 	class iterator {
 	public:
-		/**
-		 * elements
-		 * add whatever you want
-		 */
+		typename double_list<value_type*>::iterator list_it;
+
 		// --------------------------
-		iterator() {}
-		iterator(const iterator &other) {}
+		iterator() {
+		}
+		iterator(typename double_list<value_type*>::iterator li): list_it(li) {
+		}
+		iterator(const iterator &other) {
+			list_it = other.list_it;
+		}
 		~iterator() {}
 
 		/**
 		 * iter++
 		 */
-		iterator operator++(int) {}
+		iterator operator++(int) {
+			iterator tmp = *this;
+			list_it++;
+			return tmp; // 不能直接 return list_it++，因为 doublelist ite 和 linked hash map ite 不一样
+		}
 		/**
 		 * ++iter
 		 */
-		iterator &operator++() {}
+		iterator &operator++() {
+			++list_it;
+			return *this;
+		}
 		/**
 		 * iter--
 		 */
-		iterator operator--(int) {}
+		iterator operator--(int) {
+			iterator tmp = *this;
+			list_it--;
+			return tmp;
+		}
 		/**
 		 * --iter
 		 */
-		iterator &operator--() {}
+		iterator &operator--() {
+			--list_it;
+			return *this;
+		}
 
 		/**
 		 * if the iter didn't point to a value
 		 * throw "star invalid"
 		 */
-		value_type &operator*() const {}
-		value_type *operator->() const noexcept {}
+		value_type &operator*() const {
+			return **list_it; // 这里要的是 value type &
+		}
+		value_type *operator->() const noexcept {
+			return *list_it;
+		}
 
 		/**
 		 * operator to check whether two iterators are same (pointing to the same memory).
 		 */
-		bool operator==(const iterator &rhs) const {}
-		bool operator!=(const iterator &rhs) const {}
-		bool operator==(const const_iterator &rhs) const {}
-		bool operator!=(const const_iterator &rhs) const {}
+		bool operator==(const iterator &rhs) const {
+			return (list_it == rhs.list_it);
+		}
+		bool operator!=(const iterator &rhs) const {
+			return (list_it != rhs.list_it);
+		}
+		bool operator==(const const_iterator &rhs) const {
+			return (list_it == rhs.list_it);
+		}
+		bool operator!=(const const_iterator &rhs) const {
+			return (list_it != rhs.list_it);
+		}
 	};
 
 	class const_iterator {
 	public:
-		/**
-		 * elements
-		 * add whatever you want
-		 */
+		typename double_list<value_type*>::iterator list_it;
+
 		// --------------------------
 		const_iterator() {}
-		const_iterator(const iterator &other) {}
+		const_iterator(const iterator &other) {list_it = other.list_it;}
+		const_iterator(typename double_list<value_type*>::iterator li): list_it(li) {
+		}
 
 		/**
 		 * iter++
 		 */
-		const_iterator operator++(int) {}
+		const_iterator operator++(int) {
+			const_iterator tmp = *this;
+			list_it++;
+			return tmp;
+		}
 		/**
 		 * ++iter
 		 */
-		const_iterator &operator++() {}
+		const_iterator &operator++() {
+			++list_it;
+			return *this;
+		}
 		/**
 		 * iter--
 		 */
-		const_iterator operator--(int) {}
+		const_iterator operator--(int) {
+			const_iterator tmp = *this;
+			list_it--;
+			return tmp;
+		}
 		/**
 		 * --iter
 		 */
-		const_iterator &operator--() {}
+		const_iterator &operator--() {
+			--list_it;
+			return *this;
+		}
 
 		/**
 		 * if the iter didn't point to a value
 		 * throw
 		 */
-		const value_type &operator*() const {}
-		const value_type *operator->() const noexcept {}
+		const value_type &operator*() const {
+			return **list_it;
+		}
+		const value_type *operator->() const noexcept {
+			return *list_it;
+		}
 
 		/**
 		 * operator to check whether two iterators are same (pointing to the same memory).
 		 */
-		bool operator==(const iterator &rhs) const {}
-		bool operator!=(const iterator &rhs) const {}
-		bool operator==(const const_iterator &rhs) const {}
-		bool operator!=(const const_iterator &rhs) const {}
+		bool operator==(const iterator &rhs) const {
+			return list_it == rhs.list_it;
+		}
+		bool operator!=(const iterator &rhs) const {
+			return list_it != rhs.list_it;
+		}
+		bool operator==(const const_iterator &rhs) const {
+			return list_it == rhs.list_it;
+		}
+		bool operator!=(const const_iterator &rhs) const {
+			return list_it != rhs.list_it;
+		}
 	};
 
 	linked_hashmap() {}
-	linked_hashmap(const linked_hashmap &other) {}
+	linked_hashmap(const linked_hashmap &other) : Base(other) {
+    	for (auto it = other.ins_ord.begin(); it != other.ins_ord.end(); ++it) {
+      	value_type* other_kv_ptr = *it;
+      	auto my_base_it = Base::find(other_kv_ptr->first);
+        
+      	auto my_entry_ptr = my_base_it.get_entry();
+
+       	ins_ord.insert_tail(my_entry_ptr->kv);
+      	auto new_list_it = ins_ord.end();
+      	--new_list_it;
+      	my_entry_ptr->list_pos = new_list_it;
+		}
+	}
 	~linked_hashmap() {}
-	linked_hashmap &operator=(const linked_hashmap &other) {}
+	linked_hashmap &operator=(const linked_hashmap &other){
+	   if (this == &other) return *this;
+    	Base::operator=(other);
+		ins_ord.clear();
+    	for (auto it = other.ins_ord.begin(); it != other.ins_ord.end(); ++it) {
+      	value_type* other_kv_ptr = *it;
+      	auto my_base_it = Base::find(other_kv_ptr->first);
+        
+      	auto my_entry_ptr = my_base_it.get_entry();
+
+       	ins_ord.insert_tail(my_entry_ptr->kv);
+      	auto new_list_it = ins_ord.end();
+      	--new_list_it;
+      	my_entry_ptr->list_pos = new_list_it;
+    }
+
+    return *this;
+}
 
 	/**
 	 * return the value connected with the Key(O(1))
 	 * if the key not found, throw
 	 */
-	T &at(const Key &key) {}
-	const T &at(const Key &key) const {}
-	T &operator[](const Key &key) {}
-	const T &operator[](const Key &key) const {}
+	T &at(const Key &key) {
+		typename Base::iterator hash_find = Base::find(key);
+		if (hash_find == Base::end()) throw sjtu::index_out_of_bound();
+		return hash_find->second;
+	}
+	const T &at(const Key &key) const {
+		typename Base::iterator hash_find = Base::find(key);
+		if (hash_find == Base::end()) throw sjtu::index_out_of_bound();
+		return hash_find->second;
+	}
+	T &operator[](const Key &key) {
+		return at(key);
+	}
+	const T &operator[](const Key &key) const {
+		return at(key);
+	}
 
 	/**
 	 * return an iterator point to the first
 	 * inserted and existed element
 	 */
-	iterator begin() {}
-	const_iterator cbegin() const {}
+	iterator begin() {
+		return iterator(ins_ord.begin());
+	}
+	const_iterator cbegin() const {
+		return const_iterator(ins_ord.begin());
+	}
 	/**
 	 * return an iterator after the last inserted element
 	 */
-	iterator end() {}
-	const_iterator cend() const {}
+	iterator end() {
+		return iterator(ins_ord.end());
+	}
+	const_iterator cend() const {
+		return const_iterator(ins_ord.end());
+	}
 	/**
 	 * if didn't contain anything, return true,
 	 * otherwise false.
 	 */
-	bool empty() const {}
+	bool empty() const {
+		return !Base::cnt;
+	}
 
-	void clear() {}
+	void clear() {
+		Base::clear();
+		ins_ord.clear();
+	}
 
-	size_t size() const {}
+	size_t size() const {
+		return Base::cnt; // 这里好像也没说清楚（
+	}
+
 	/**
-	 * insert the value_piar
+	 * insert the value_pair
 	 * if the key of the value_pair exists in the map
 	 * update the value instead of adding a new element，
 	 * then the order of the element moved from inner of the
@@ -577,25 +704,51 @@ public:
 	 * if the key of the value_pair doesn't exist in the map
 	 * add a new element and return true
 	 */
-	pair<iterator, bool> insert(const value_type &value) {}
+	pair<iterator, bool> insert(const value_type &value) {
+		sjtu::pair<typename Base::iterator, bool> base_ins = Base::insert(value);
+		typename Base::Entry* target = (base_ins.first).get_entry();
+		if (!base_ins.second) {
+			// 需要删掉原本的点
+			ins_ord.erase(target->list_pos);
+		}
+		ins_ord.insert_tail(target->kv);
+      auto new_list_it = ins_ord.end();
+      --new_list_it;
+      target->list_pos = new_list_it;
+		return pair<iterator, bool>(iterator(new_list_it), base_ins.second);
+	}
 	/**
 	 * erase the value_pair pointed by the iterator
 	 * if the iterator points to nothing
 	 * throw
 	 */
-	void remove(iterator pos) {}
+	void remove(iterator pos) {
+		if (pos == end()) throw sjtu::invalid_iterator();
+		typename double_list<value_type*>::iterator db_ptr = pos.list_it;
+		Key key = pos->first;
+		ins_ord.erase(db_ptr);
+		Base::remove(key);
+	}
 	/**
 	 * return how many value_pairs consist of key
 	 * this should only return 0 or 1
 	 */
-	size_t count(const Key &key) const {}
+	size_t count(const Key &key) const {
+		return (Base::find(key) != Base::end()) ? 1 : 0;
+	}
 	/**
 	 * find the iterator points at the value_pair
 	 * which consist of key
 	 * if not find, return the iterator
 	 * point at nothing
 	 */
-	iterator find(const Key &key) {}
+	iterator find(const Key &key) {
+		typename Base::iterator out = Base::find(key);
+		if (out == Base::end()) return end();
+		typename Base::Entry* tar_entry = out.get_entry();
+		typename double_list<value_type*>::iterator db_it = tar_entry->list_pos;
+		return iterator(db_it); 
+	}
 };
 
 class lru {
@@ -621,11 +774,11 @@ public:
 	 * change the order.
 	 */
 	void print() {
-   // sjtu::linked_hashmap<Integer, Matrix<int>, Hash, Equal>::iterator it;
-   // for (it = mem->begin(); it != mem->end(); it++) {
-   //      std::cout << (*it).first.val << " "
-   //                << (*it).second << std::endl;
-   // 	}
+		// sjtu::linked_hashmap<Integer, Matrix<int>, Hash, Equal>::iterator it;
+		// for (it = mem->begin(); it != mem->end(); it++) {
+		// 	std::cout << (*it).first.val << " "
+		// 					<< (*it).second << std::endl;
+		// 	}
 	}
 };
 } // namespace sjtu
