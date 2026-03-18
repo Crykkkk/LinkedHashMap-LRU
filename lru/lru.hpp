@@ -155,7 +155,7 @@ public:
 	 */
 	iterator begin() {
 		return iterator(head_->next);
-	} // 应该是这样吧🤔
+	} 
 	/**
 	 * return an iterator to the ending
 	 * in fact, it returns the iterator point to nothing,
@@ -230,13 +230,19 @@ template<class Key, class T, class Hash = std::hash<Key>, class Equal = std::equ
 class hashmap {
 public:
 	using value_type = pair<const Key, T>;
-	using Bucket = std::list<value_type*>;
+	struct Entry{
+		value_type* kv;
+		typename double_list<value_type*>::iterator list_pos; // 这里是为了 Linked hash map 做准备
+		Entry(value_type* k) : kv(k) {}
+	};
+
+	using Bucket = std::list<Entry*>;
    using BucketIterator = typename Bucket::iterator; 
-	
+
 	int Size;
 	int cnt = 0;
 	const float load_factor = 0.8;
-	std::vector<std::list<value_type*>> data;
+	std::vector<std::list<Entry*>> data;
 	// --------------------------
 
 	/**
@@ -251,9 +257,9 @@ public:
 		cnt = other.cnt;
 		data.resize(Size);
 		for (int i = 0; i < Size; i++) {
-         for (value_type* ptr : other.data[i]) {
-            value_type* new_pair = new value_type(*ptr);
-            data[i].push_back(new_pair);
+         for (Entry* ptr : other.data[i]) {
+            value_type* new_pair = new value_type(*(ptr->kv));
+            data[i].push_back(new Entry(new_pair));
         }
    	}
 	}
@@ -271,9 +277,9 @@ public:
 		cnt = other.cnt;
 		data.resize(Size);
 		for (int i = 0; i < Size; i++) {
-         for (value_type* ptr : other.data[i]) {
-            value_type* new_pair = new value_type(*ptr);
-            data[i].push_back(new_pair);
+         for (Entry* ptr : other.data[i]) {
+            value_type* new_pair = new value_type(*(ptr->kv));
+            data[i].push_back(new Entry(new_pair));
         }
    	}
 		return *this;
@@ -309,7 +315,7 @@ public:
 			if (host == nullptr) {
 				throw sjtu::container_is_empty();
 			}
-			return **it;
+			return *((*it)->kv);
 		}
 
 		/**
@@ -320,7 +326,7 @@ public:
 			if (host == nullptr) {
 				throw sjtu::container_is_empty();
 			}
-			return *it;
+			return (*it)->kv;
 		}
 		bool operator==(const iterator &rhs) const { // Done
 			return (host == rhs.host) && (bucket == rhs.bucket) && (it == rhs.it);
@@ -332,7 +338,8 @@ public:
 
 	void clear() { // Done
 		for (int i = 0; i < Size; i++) {
-			for (value_type* ptr : data[i]) {
+			for (Entry* ptr : data[i]) {
+				delete (ptr->kv);
 				delete ptr; 
 			}
 			data[i].clear();
@@ -345,11 +352,13 @@ public:
 	 */
 	void expand() { // 这里需要 rehash，才能支持后面的 find
 		Size *= 2;
-		std::vector<std::list<value_type*>> newdata(Size);
+		std::vector<std::list<Entry*>> newdata(Size);
 		for (int i = 0; i < data.size(); i++) {
-			for (value_type* j : data[i]) {
-				int nh = Hash()(j->first) % Size;
-				newdata[nh].push_back(j);
+			for (Entry* j : data[i]) {
+				int nh = Hash()(j->kv->first) % Size;
+				// newdata[nh].push_back(new Entry(j->kv));
+				newdata[nh].push_back(j); // 直接搬运指针
+				// j->kv = nullptr; 
 			}
 		}
 		data.swap(newdata); 
@@ -368,10 +377,10 @@ public:
 	iterator find(const Key &key) const {
 		int hash_out = Hash()(key) % Size;
 
-		std::list<value_type*> &check = const_cast<hashmap*>(this)->data[hash_out];
+		std::list<Entry*> &check = const_cast<hashmap*>(this)->data[hash_out];
 
 		for (auto it = check.begin(); it != check.end(); it++) {
-			if (Equal()((*it)->first, key)) {
+			if (Equal()((*it)->kv->first, key)) {
 				return iterator(hash_out, it, const_cast<hashmap*>(this));
 			}
 		}
@@ -386,15 +395,15 @@ public:
 	sjtu::pair<iterator, bool> insert(const value_type &value_pair) {
 		// 需要注意什么时候调用 expand
 		int hash_out = Hash()(value_pair.first) % Size;
-		std::list<value_type*> &check = data[hash_out];
+		std::list<Entry*> &check = data[hash_out];
 		for (auto it = check.begin(); it != check.end(); it++) {
-			if (Equal()((*it)->first, value_pair.first)) {
-				(*it)->second = value_pair.second;
+			if (Equal()((*it)->kv->first, value_pair.first)) {
+				(*it)->kv->second = value_pair.second;
 				return sjtu::pair<iterator, bool>(iterator(hash_out, it, const_cast<hashmap*>(this)), false);
 			}
 		}
 		
-		check.push_back(new value_type(value_pair));
+		check.push_back(new Entry(new value_type(value_pair))); // valuepair是一个引用，可能是临时的
 
 		cnt++;
 		if (cnt >= Size * load_factor) {
@@ -411,10 +420,11 @@ public:
 	 */
 	bool remove(const Key &key) {
 		int hash_out = Hash()(key) % Size;
-		std::list<value_type*> &check = data[hash_out];
+		std::list<Entry*> &check = data[hash_out];
 		for (auto it = check.begin(); it != check.end(); ++it) {
-			if (Equal()((*it)->first, key)) {
-					delete *it;        
+			if (Equal()((*it)->kv->first, key)) {
+					delete (*it)->kv;
+					delete (*it);        
 					check.erase(it); 
 					cnt--;
 					return true;
@@ -432,6 +442,8 @@ public:
 	 * elements
 	 * add whatever you want
 	 */
+	double_list<value_type*> ins_ord; // data type 为指针保证了有默认构造函数（也好找）
+
 	// --------------------------
 	class const_iterator;
 	class iterator {
@@ -608,7 +620,13 @@ public:
 	 * this operation follows the order, but don't
 	 * change the order.
 	 */
-	void print() {}
+	void print() {
+   // sjtu::linked_hashmap<Integer, Matrix<int>, Hash, Equal>::iterator it;
+   // for (it = mem->begin(); it != mem->end(); it++) {
+   //      std::cout << (*it).first.val << " "
+   //                << (*it).second << std::endl;
+   // 	}
+	}
 };
 } // namespace sjtu
 
